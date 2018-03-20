@@ -66,3 +66,20 @@ func (g *GcpClient) Instances(project string) ([]*compute.Instance, error) {
 	}
 	return instances, nil
 }
+
+type paginatedLister interface {
+	Pages(context.Context, func(itemLister) error) error
+}
+
+type itemLister interface {
+	Items() []interface{}
+}
+
+func getAllItems(c context.Context, p paginatedLister) ([]interface{}, error) {
+	items := []interface{}{}
+	err := p.Pages(c, func(page itemLister) error {
+		items = append(items, page.Items)
+		return nil
+	})
+	return items, err
+}
