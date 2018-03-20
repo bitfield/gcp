@@ -3,11 +3,13 @@ package gcp
 import (
 	"errors"
 	"fmt"
+	"log"
+	"net/http"
+
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
-	"log"
-	"strings"
+	"google.golang.org/api/googleapi"
 )
 
 type GcpClient struct {
@@ -51,10 +53,15 @@ func (g *GcpClient) Instances(project string) ([]*compute.Instance, error) {
 		}
 		return nil
 	}); err != nil {
-		if strings.Contains(err.Error(), "Access Not Configured") {
-			return nil, errors.New(fmt.Sprintf("Project %s is not API-enabled, skipping", project))
-		} else if strings.Contains(err.Error(), "is not found") {
-			return nil, errors.New(fmt.Sprintf("Project %s not found", project))
+		if apiError, ok := err.(*googleapi.Error); ok {
+			switch apiError.Code {
+			case http.StatusForbidden:
+				return nil, errors.New(fmt.Sprintf("Project %s is not API-enabled, skipping", project))
+			case http.StatusNotFound:
+				return nil, errors.New(fmt.Sprintf("Project %s not found", project))
+			default:
+				return nil, err
+			}
 		}
 	}
 	return instances, nil
