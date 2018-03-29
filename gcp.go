@@ -1,7 +1,6 @@
 package gcp
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,13 +11,15 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
-type GcpClient struct {
+// Client is a wrapper for Google Cloud's various API Service types.
+type Client struct {
 	computeService *compute.Service
 	ctx            context.Context
 }
 
-func New() (*GcpClient, error) {
-	g := &GcpClient{}
+// New connects to Google Cloud with your application default credentials and creates a compute.Service ready to use
+func New() (*Client, error) {
+	g := &Client{}
 	g.ctx = context.Background()
 	c, err := google.DefaultClient(g.ctx, compute.CloudPlatformScope)
 	if err != nil {
@@ -33,7 +34,8 @@ func New() (*GcpClient, error) {
 	return g, nil
 }
 
-func (g *GcpClient) Instances(project string) ([]*compute.Instance, error) {
+// Instances returns all compute instances in the specified project, or nil if there was an error
+func (g *Client) Instances(project string) ([]*compute.Instance, error) {
 	instances := []*compute.Instance{}
 
 	// Get all zones in the project
@@ -56,30 +58,13 @@ func (g *GcpClient) Instances(project string) ([]*compute.Instance, error) {
 		if apiError, ok := err.(*googleapi.Error); ok {
 			switch apiError.Code {
 			case http.StatusForbidden:
-				return nil, errors.New(fmt.Sprintf("Project %s is not API-enabled, skipping", project))
+				return nil, fmt.Errorf("Project %s is not API-enabled, skipping", project)
 			case http.StatusNotFound:
-				return nil, errors.New(fmt.Sprintf("Project %s not found", project))
+				return nil, fmt.Errorf("Project %s not found", project)
 			default:
 				return nil, err
 			}
 		}
 	}
 	return instances, nil
-}
-
-type paginatedLister interface {
-	Pages(context.Context, func(itemLister) error) error
-}
-
-type itemLister interface {
-	Items() []interface{}
-}
-
-func getAllItems(c context.Context, p paginatedLister) ([]interface{}, error) {
-	items := []interface{}{}
-	err := p.Pages(c, func(page itemLister) error {
-		items = append(items, page.Items)
-		return nil
-	})
-	return items, err
 }
