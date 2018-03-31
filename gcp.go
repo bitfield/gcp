@@ -34,38 +34,38 @@ func New() (*Client, error) {
 }
 
 // Instances returns all compute instances in the specified project and zone, or nil if there was an error
-func (g *Client) Instances(project, zone string) ([]*compute.Instance, error) {
-	instances := []*compute.Instance{}
-	instancesListCall := g.s.Instances.List(project, zone)
-	if err := instancesListCall.Pages(g.ctx, func(page *compute.InstanceList) error {
+func (g *Client) Instances(project, zone string) (instances []*compute.Instance, e error) {
+	if err := g.s.Instances.List(project, zone).Pages(g.ctx, func(page *compute.InstanceList) error {
 		instances = append(instances, page.Items...)
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("instance list call failed: %v", err)
+		return nil, interpretGoogleAPIError(err)
 	}
 	return instances, nil
 }
 
-func (g *Client) Zones(project string) ([]string, error) {
-	zones := []string{}
-	zonesListCall := g.s.Zones.List(project)
-	err := zonesListCall.Pages(g.ctx, func(page *compute.ZoneList) error {
+func (g *Client) Zones(project string) (zones []string, e error) {
+	if err := g.s.Zones.List(project).Pages(g.ctx, func(page *compute.ZoneList) error {
 		for _, zone := range page.Items {
 			zones = append(zones, zone.Name)
 		}
 		return nil
-	})
-	if err != nil {
-		if apiError, ok := err.(*googleapi.Error); ok {
-			switch apiError.Code {
-			case http.StatusForbidden:
-				return nil, fmt.Errorf("Project %s is not API-enabled, skipping", project)
-			case http.StatusNotFound:
-				return nil, fmt.Errorf("Project %s not found", project)
-			default:
-				return nil, err
-			}
-		}
+	}); err != nil {
+		return nil, interpretGoogleAPIError(err)
 	}
 	return zones, nil
+}
+
+func interpretGoogleAPIError(err error) error {
+	if apiError, ok := err.(*googleapi.Error); ok {
+		switch apiError.Code {
+		case http.StatusForbidden:
+			return fmt.Errorf("project is not API-enabled")
+		case http.StatusNotFound:
+			return fmt.Errorf("project not found")
+		default:
+			return fmt.Errorf("API call failed: %v", err)
+		}
+	}
+	return err
 }
