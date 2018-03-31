@@ -33,7 +33,7 @@ func New() (*Client, error) {
 	}, nil
 }
 
-// Instances returns all compute instances in the specified project and zone, or nil if there was an error
+// Instances returns all compute instances in the specified project and zone
 func (g *Client) Instances(project, zone string) (instances []*compute.Instance, e error) {
 	if err := g.s.Instances.List(project, zone).Pages(g.ctx, func(page *compute.InstanceList) error {
 		instances = append(instances, page.Items...)
@@ -44,6 +44,7 @@ func (g *Client) Instances(project, zone string) (instances []*compute.Instance,
 	return instances, nil
 }
 
+// Zones returns all zones in the specified project
 func (g *Client) Zones(project string) (zones []string, e error) {
 	if err := g.s.Zones.List(project).Pages(g.ctx, func(page *compute.ZoneList) error {
 		for _, zone := range page.Items {
