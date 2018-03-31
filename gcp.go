@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"golang.org/x/net/context"
@@ -13,48 +12,50 @@ import (
 
 // Client is a wrapper for Google Cloud's various API Service types.
 type Client struct {
-	computeService *compute.Service
-	ctx            context.Context
+	s   *compute.Service
+	ctx context.Context
 }
 
-// New connects to Google Cloud with your application default credentials and creates a compute.Service ready to use
+// New connects to Google Cloud with your application default credentials and returns a *Client ready to use
 func New() (*Client, error) {
-	g := &Client{}
-	g.ctx = context.Background()
-	c, err := google.DefaultClient(g.ctx, compute.CloudPlatformScope)
+	ctx := context.Background()
+	google, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("couldn't create DefaultClient: %v", err)
 	}
-
-	computeService, err := compute.New(c)
+	computeService, err := compute.New(google)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("couldn't create compute service: %v", err)
 	}
-	g.computeService = computeService
-	return g, nil
+	return &Client{
+		s:   computeService,
+		ctx: ctx,
+	}, nil
 }
 
-// Instances returns all compute instances in the specified project, or nil if there was an error
-func (g *Client) Instances(project string) ([]*compute.Instance, error) {
+// Instances returns all compute instances in the specified project and zone, or nil if there was an error
+func (g *Client) Instances(project, zone string) ([]*compute.Instance, error) {
 	instances := []*compute.Instance{}
-
-	// Get all zones in the project
-	zoneReq := g.computeService.Zones.List(project)
-	if err := zoneReq.Pages(g.ctx, func(page *compute.ZoneList) error {
-		for _, zone := range page.Items {
-
-			// Get all instances in the zone
-			//log.Printf("Searching for instances in project %s, zone %s", project, zone.Name)
-			computeReq := g.computeService.Instances.List(project, zone.Name)
-			if err := computeReq.Pages(g.ctx, func(page *compute.InstanceList) error {
-				instances = append(instances, page.Items...)
-				return nil
-			}); err != nil {
-				log.Fatal(err)
-			}
-		}
+	instancesListCall := g.s.Instances.List(project, zone)
+	if err := instancesListCall.Pages(g.ctx, func(page *compute.InstanceList) error {
+		instances = append(instances, page.Items...)
 		return nil
 	}); err != nil {
+		return nil, fmt.Errorf("instance list call failed: %v", err)
+	}
+	return instances, nil
+}
+
+func (g *Client) Zones(project string) ([]string, error) {
+	zones := []string{}
+	zonesListCall := g.s.Zones.List(project)
+	err := zonesListCall.Pages(g.ctx, func(page *compute.ZoneList) error {
+		for _, zone := range page.Items {
+			zones = append(zones, zone.Name)
+		}
+		return nil
+	})
+	if err != nil {
 		if apiError, ok := err.(*googleapi.Error); ok {
 			switch apiError.Code {
 			case http.StatusForbidden:
@@ -66,5 +67,5 @@ func (g *Client) Instances(project string) ([]*compute.Instance, error) {
 			}
 		}
 	}
-	return instances, nil
+	return zones, nil
 }
