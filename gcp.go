@@ -1,23 +1,26 @@
 package gcp
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 
+	hclPrinter "github.com/hashicorp/hcl/hcl/printer"
+	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 )
 
-// Client is a wrapper for Google Cloud's various API Service types.
+// A Client holds a connected Google compute.Service and context
 type Client struct {
 	s   *compute.Service
 	ctx context.Context
 }
 
-// New connects to Google Cloud with your application default credentials and returns a *Client ready to use
-func New() (*Client, error) {
+// NewClient connects to Google Cloud with your application default credentials and returns a *Client ready to use
+func NewClient() (*Client, error) {
 	ctx := context.Background()
 	google, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
 	if err != nil {
@@ -69,4 +72,17 @@ func interpretGoogleAPIError(err error) error {
 		}
 	}
 	return err
+}
+
+func JSON2HCL(json []byte) (string, error) {
+	ast, err := jsonParser.Parse(json)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse JSON to HCL: %v\n", err)
+	}
+	var buf bytes.Buffer
+	err = hclPrinter.Fprint(&buf, ast)
+	if err != nil {
+		return "", fmt.Errorf("failed to print HCL: %s\n", err)
+	}
+	return buf.String(), nil
 }
