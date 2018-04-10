@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,7 +24,6 @@ func TestInterpretGoogleAPIError(t *testing.T) {
 		{input: error(&googleapi.Error{Code: http.StatusForbidden}), want: "project is not API-enabled"},
 		{input: error(&googleapi.Error{Code: http.StatusNotFound}), want: "project not found"},
 		{input: error(&googleapi.Error{Code: http.StatusInternalServerError}), want: "API call failed: googleapi: got HTTP response code 500 with body: "},
-		{input: error(&googleapi.Error{Code: http.StatusBadRequest}), want: "zone not found"},
 		{input: error(errors.New("bogus error")), want: "bogus error"},
 	}
 	for _, c := range tests {
@@ -48,24 +48,25 @@ func TestJSON2HCL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("couldn't read test fixture: %s\n", err)
 		}
-		want_hcl, err := ioutil.ReadFile(filepath.Join("testdata", c.goldenFile))
+		wantHCL, err := ioutil.ReadFile(filepath.Join("testdata", c.goldenFile))
 		if err != nil {
 			t.Fatalf("couldn't read test fixture: %s\n", err)
 		}
-		hcl, err := JSON2HCL(json)
+		var buf bytes.Buffer
+		err = JSON2HCL(&buf, json)
 		if err != nil {
 			t.Errorf("JSON2HCL(%s) failed: %s\n", c.inputFile, err)
 		}
-		got_hcl := []byte(hcl)
+		gotHCL := buf.Bytes()
 		if *update {
-			fmt.Printf("writing golden file %s: %s\n", c.goldenFile, got_hcl)
-			err = ioutil.WriteFile(filepath.Join("testdata", c.goldenFile), []byte(got_hcl), 0644)
+			fmt.Printf("writing golden file %s: %s\n", c.goldenFile, gotHCL)
+			err = ioutil.WriteFile(filepath.Join("testdata", c.goldenFile), gotHCL, 0644)
 			if err != nil {
 				t.Fatalf("couldn't update test fixture: %s\n", err)
 			}
-			want_hcl = got_hcl
+			wantHCL = gotHCL
 		}
-		diffText := unifiedDiff(got_hcl, want_hcl)
+		diffText := unifiedDiff(gotHCL, wantHCL)
 		if len(diffText) > 0 {
 			t.Errorf("JSON2HCL(%s) differs from golden file %s: %s\n", c.inputFile, c.goldenFile, diffText)
 		}

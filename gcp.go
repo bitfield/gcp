@@ -1,8 +1,8 @@
 package gcp
 
 import (
-	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 
 	hclPrinter "github.com/hashicorp/hcl/hcl/printer"
@@ -41,7 +41,7 @@ func (g *Client) Instances(project, zone string) (instances []*compute.Instance,
 		instances = append(instances, page.Items...)
 		return nil
 	}); err != nil {
-		return nil, interpretGoogleAPIError(err)
+		return nil, fmt.Errorf("failed to list instances for project %s, zone %s: %v", project, zone, interpretGoogleAPIError(err))
 	}
 	return instances, nil
 }
@@ -73,15 +73,15 @@ func interpretGoogleAPIError(err error) error {
 	return err
 }
 
-func JSON2HCL(json []byte) (string, error) {
+// JSON2HCL takes a JSON representation of a GCP resource and writes the equivalent HCL (Terraform) representation to the supplied io.Writer
+func JSON2HCL(w io.Writer, json []byte) error {
 	ast, err := jsonParser.Parse(json)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse JSON to HCL: %v\n", err)
+		return fmt.Errorf("failed to parse JSON to HCL: %v", err)
 	}
-	var buf bytes.Buffer
-	err = hclPrinter.Fprint(&buf, ast)
+	err = hclPrinter.Fprint(w, ast)
 	if err != nil {
-		return "", fmt.Errorf("failed to print HCL: %s\n", err)
+		return fmt.Errorf("failed to print HCL: %s", err)
 	}
-	return buf.String(), nil
+	return nil
 }

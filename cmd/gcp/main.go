@@ -3,10 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
 	"github.com/bitfield/gcp"
+	compute "google.golang.org/api/compute/v1"
 )
 
 var g gcp.Client
@@ -21,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err := g.Connect(); err != nil {
-		log.Fatal("failed to connect to Google Cloud: %v\n", err)
+		log.Fatalf("failed to connect to Google Cloud: %v\n", err)
 	}
 	switch *resource {
 	case "zone":
@@ -31,27 +33,27 @@ func main() {
 			fmt.Println("Please specify a zone with -zone")
 			os.Exit(1)
 		}
-		dumpInstances(*project, *zone)
+		instances, err := g.Instances(*project, *zone)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err = dumpInstances(os.Stdout, instances); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
-func dumpInstances(project, zone string) {
-	instances, err := g.Instances(project, zone)
-	if err != nil {
-		log.Fatalf("failed to list instances for project %s, zone %s: %v\n", project, zone, err)
-	}
+func dumpInstances(w io.Writer, instances []*compute.Instance) error {
 	for _, i := range instances {
 		json, err := i.MarshalJSON()
 		if err != nil {
-			log.Fatalf("failed to marshal JSON: %v\n", err)
+			return fmt.Errorf("failed to marshal JSON: %v", err)
 		}
-		hcl, err := gcp.JSON2HCL(json)
-		if err != nil {
-			log.Fatalf("failed to parse JSON to HCL: %v\n", err)
+		if err = gcp.JSON2HCL(w, json); err != nil {
+			return fmt.Errorf("failed to parse JSON to HCL: %v", err)
 		}
-		fmt.Println(hcl)
 	}
-	fmt.Printf("\n\n# Retrieved %d resources\n", len(instances))
+	return nil
 }
 
 func dumpZones(project string) {
