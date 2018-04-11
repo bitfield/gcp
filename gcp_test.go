@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/pmezard/go-difflib/difflib"
+	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 )
 
@@ -81,4 +82,34 @@ func unifiedDiff(a, b []byte) string {
 	}
 	diffText, _ := difflib.GetUnifiedDiffString(diff)
 	return diffText
+}
+
+func TestDumpInstances(t *testing.T) {
+	instances := []*compute.Instance{
+		{Name: "foo"},
+		{Name: "bar"},
+		{Name: "baz"},
+	}
+	var got, want bytes.Buffer
+	want.WriteString(`"name" = "foo""name" = "bar""name" = "baz"`)
+	if err := dumpInstances(&got, instances); err != nil {
+		t.Errorf("dumpInstances errored: %v", err)
+	}
+	if !bytes.Equal(want.Bytes(), got.Bytes()) {
+		t.Errorf("dumpInstances returned %s, want %s", got.String(), want.String())
+	}
+}
+
+func TestDumpZones(t *testing.T) {
+	instances := []*compute.Zone{
+		{Name: "foo"},
+		{Name: "bar"},
+		{Name: "baz"},
+	}
+	var got, want bytes.Buffer
+	want.WriteString("foo\nbar\nbaz\n")
+	dumpZones(&got, instances)
+	if !bytes.Equal(want.Bytes(), got.Bytes()) {
+		t.Errorf("dumpZones returned %s, want %s", got.String(), want.String())
+	}
 }

@@ -3,6 +3,7 @@ package gcp
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	hclPrinter "github.com/hashicorp/hcl/hcl/printer"
@@ -55,6 +56,45 @@ func (g *Client) Zones(project string) (zones []*compute.Zone, e error) {
 		return nil, interpretGoogleAPIError(err)
 	}
 	return zones, nil
+}
+
+// ListZones gets the list of all zones in the specified project and prints their names to the specified io.Writer.
+func (g *Client) ListZones(w io.Writer, project string) {
+	zones, err := g.Zones(project)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dumpZones(w, zones)
+}
+
+// ListInstances gets the list of all GCP instances in the specified project and writes an HCL representation of each to the specified io.Writer.
+func (g *Client) ListInstances(w io.Writer, project string, zone string) {
+	instances, err := g.Instances(project, zone)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err = dumpInstances(w, instances); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func dumpInstances(w io.Writer, instances []*compute.Instance) error {
+	for _, i := range instances {
+		json, err := i.MarshalJSON()
+		if err != nil {
+			return fmt.Errorf("failed to marshal JSON: %v", err)
+		}
+		if err = JSON2HCL(w, json); err != nil {
+			return fmt.Errorf("failed to parse JSON to HCL: %v", err)
+		}
+	}
+	return nil
+}
+
+func dumpZones(w io.Writer, zones []*compute.Zone) {
+	for _, z := range zones {
+		fmt.Fprintln(w, z.Name)
+	}
 }
 
 func interpretGoogleAPIError(err error) error {
