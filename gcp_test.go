@@ -12,6 +12,7 @@ import (
 
 	"github.com/pmezard/go-difflib/difflib"
 	compute "google.golang.org/api/compute/v1"
+	dns "google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
 )
 
@@ -111,5 +112,18 @@ func TestDumpZones(t *testing.T) {
 	dumpZones(&got, instances)
 	if !bytes.Equal(want.Bytes(), got.Bytes()) {
 		t.Errorf("dumpZones returned %s, want %s", got.String(), want.String())
+	}
+}
+func TestDumpDNSManagedZones(t *testing.T) {
+	instances := []*dns.ManagedZone{
+		{DnsName: "foo"},
+		{DnsName: "bar"},
+		{DnsName: "baz"},
+	}
+	var got, want bytes.Buffer
+	want.WriteString("foo\nbar\nbaz\n")
+	dumpDNSManagedZones(&got, instances)
+	if !bytes.Equal(want.Bytes(), got.Bytes()) {
+		t.Errorf("dumpDNSManagedZones returned %s, want %s", got.String(), want.String())
 	}
 }

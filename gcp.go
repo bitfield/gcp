@@ -3,7 +3,6 @@ package gcp
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	hclPrinter "github.com/hashicorp/hcl/hcl/printer"
@@ -11,13 +10,15 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
+	dns "google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
 )
 
 // A Client holds a connected Google compute.Service and context
 type Client struct {
-	s   *compute.Service
-	ctx context.Context
+	compute *compute.Service
+	dns     *dns.Service
+	ctx     context.Context
 }
 
 // Connect connects the Client to Google Cloud with your application default credentials
@@ -27,18 +28,21 @@ func (g *Client) Connect() error {
 	if err != nil {
 		return fmt.Errorf("couldn't create DefaultClient: %v", err)
 	}
-	computeService, err := compute.New(google)
+	g.compute, err = compute.New(google)
 	if err != nil {
 		return fmt.Errorf("couldn't create compute service: %v", err)
 	}
-	g.s = computeService
+	g.dns, err = dns.New(google)
+	if err != nil {
+		return fmt.Errorf("couldn't create DNS service: %v", err)
+	}
 	g.ctx = ctx
 	return nil
 }
 
 // Instances returns all compute instances in the specified project and zone
 func (g *Client) Instances(project, zone string) (instances []*compute.Instance, e error) {
-	if err := g.s.Instances.List(project, zone).Pages(g.ctx, func(page *compute.InstanceList) error {
+	if err := g.compute.Instances.List(project, zone).Pages(g.ctx, func(page *compute.InstanceList) error {
 		instances = append(instances, page.Items...)
 		return nil
 	}); err != nil {
@@ -47,35 +51,16 @@ func (g *Client) Instances(project, zone string) (instances []*compute.Instance,
 	return instances, nil
 }
 
-// Zones returns all zones in the specified project
-func (g *Client) Zones(project string) (zones []*compute.Zone, e error) {
-	if err := g.s.Zones.List(project).Pages(g.ctx, func(page *compute.ZoneList) error {
-		zones = append(zones, page.Items...)
-		return nil
-	}); err != nil {
-		return nil, interpretGoogleAPIError(err)
-	}
-	return zones, nil
-}
-
-// ListZones gets the list of all zones in the specified project and prints their names to the specified io.Writer.
-func (g *Client) ListZones(w io.Writer, project string) {
-	zones, err := g.Zones(project)
-	if err != nil {
-		log.Fatal(err)
-	}
-	dumpZones(w, zones)
-}
-
 // ListInstances gets the list of all GCP instances in the specified project and writes an HCL representation of each to the specified io.Writer.
-func (g *Client) ListInstances(w io.Writer, project string, zone string) {
+func (g *Client) ListInstances(w io.Writer, project string, zone string) error {
 	instances, err := g.Instances(project, zone)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err = dumpInstances(w, instances); err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 func dumpInstances(w io.Writer, instances []*compute.Instance) error {
@@ -91,9 +76,57 @@ func dumpInstances(w io.Writer, instances []*compute.Instance) error {
 	return nil
 }
 
+// Zones returns all zones in the specified project
+func (g *Client) Zones(project string) (zones []*compute.Zone, e error) {
+	if err := g.compute.Zones.List(project).Pages(g.ctx, func(page *compute.ZoneList) error {
+		zones = append(zones, page.Items...)
+		return nil
+	}); err != nil {
+		return nil, interpretGoogleAPIError(err)
+	}
+	return zones, nil
+}
+
+// ListZones gets the list of all zones in the specified project and prints their names to the specified io.Writer.
+func (g *Client) ListZones(w io.Writer, project string) error {
+	zones, err := g.Zones(project)
+	if err != nil {
+		return err
+	}
+	dumpZones(w, zones)
+	return nil
+}
+
 func dumpZones(w io.Writer, zones []*compute.Zone) {
 	for _, z := range zones {
 		fmt.Fprintln(w, z.Name)
+	}
+}
+
+// DNSManagedZones returns all DNS managed zones in the specified project
+func (g *Client) DNSManagedZones(project string) (dnszones []*dns.ManagedZone, e error) {
+	if err := g.dns.ManagedZones.List(project).Pages(g.ctx, func(page *dns.ManagedZonesListResponse) error {
+		dnszones = append(dnszones, page.ManagedZones...)
+		return nil
+	}); err != nil {
+		return nil, interpretGoogleAPIError(err)
+	}
+	return dnszones, nil
+}
+
+// ListDNSManagedZones gets the list of all DNS managed zones in the specified project and prints their names to the specified io.Writer.
+func (g *Client) ListDNSManagedZones(w io.Writer, project string) error {
+	zones, err := g.DNSManagedZones(project)
+	if err != nil {
+		return err
+	}
+	dumpDNSManagedZones(w, zones)
+	return nil
+}
+
+func dumpDNSManagedZones(w io.Writer, dnszones []*dns.ManagedZone) {
+	for _, z := range dnszones {
+		fmt.Fprintln(w, z.DnsName)
 	}
 }
 
